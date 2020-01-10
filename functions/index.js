@@ -36,18 +36,63 @@ exports.truncate = functions.database.ref('/{userid}/Average/{paramID}').onWrite
    .catch(err => {
        console.log('Error Occured',err);
    });
-  //const snapshot = await (p.once('value'));
-  
-
 }));
 
-// exports.truncate = functions.database.ref('{userId}/Average/{paramID}').onCreate((snapshot,context) => {
-//     console.log('Triggered Truncate function');
-//     // const parameter = context.params.parameter;
-//     // const n = snapshot.numChildren();
-//     // console.log('Parameter changed is: '+parameter);
-//     // console.log('There are '+n+' childern in the snapshot');
-//     return null;
-// });
+exports.appendTime = functions.database.ref('{userID}/Zones/{zone}/{paramID}/{value}').onCreate( async (snapshot,context) => {
+    console.log('Triggered function appendTime');
+    console.log('Snapshot: '+snapshot.val());
+    const userID = context.params.userID; //user id
+    const paramter = context.params.paramID;
+    const addedValue = snapshot.val(); // latest value received
+    var oldValue = 0;
+    var newAvg = 0;
+    var oldAvg = 0;
 
-//exports.truncate = functions.database.ref('{userId}/Average/{}')
+    try{
+      const valSnap = await snapshot.ref.parent.once('value');
+      const index = valSnap.numChildren() - 2;
+      var count = 0;
+      valSnap.forEach(function(child){
+        if(count === index){
+          oldValue = child.val(); // last value
+        }
+        count++;
+      });
+      console.log('Old Value: '+oldValue+' Count: '+count);
+
+      //get the number of value
+      const numSnap = await admin.database().ref(userID+'/NumberOfUnits').once('value');
+      const num = numSnap.val();
+      console.log('Number Of Devices: '+num);
+
+      const oldAvgSnap = await admin.database().ref(userID+'/Average/'+paramter).once('value');
+      if(oldAvgSnap.hasChildren()){
+        var lastChild;
+        oldAvgSnap.forEach( function(child) {
+          lastChild = child;
+        });      
+        oldAvg = lastChild.val(); // last Average Value
+      }
+      
+      console.log('Old Average: '+oldAvg);
+
+      // if average is calculated for first time, add value directly
+       const dbRef = admin.database().ref(userID+'/Average/'+paramter);
+      if(oldAvg === 0){
+        newAvg = addedValue;
+      }else{
+        // calculate new average
+        if(oldValue === 0){
+          //new Sensor unit added
+          newAvg = ((oldAvg*(num-1)) - oldValue + addedValue)/num;
+        }else{
+          //just new Reading
+          newAvg = ((oldAvg*(num-1)) - oldValue + addedValue)/num;
+        }
+      }
+
+    }catch(err){
+      console.log('Error: ',err);
+    }
+    return admin.database().ref(userID+'/Average/'+paramter).push(newAvg);
+  });
