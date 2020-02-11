@@ -87,7 +87,7 @@ exports.appendTime = functions.database.ref('{userID}/Zones/{zone}/{paramID}/{va
           newAvg = ((oldAvg*(num-1)) - oldValue + addedValue)/num;
         }else{
           //just new Reading
-          newAvg = ((oldAvg*(num-1)) - oldValue + addedValue)/num;
+          newAvg = ((oldAvg*(num)) - oldValue + addedValue)/num;
         }
       }
 
