@@ -38,8 +38,21 @@ exports.truncate = functions.database.ref('/{userid}/Average/{paramID}').onWrite
    });
 }));
 
-exports.appendTime = functions.database.ref('{userID}/Zones/{zone}/{paramID}/{value}').onCreate( async (snapshot,context) => {
-    console.log('Triggered function appendTime');
+// exports.appendTime = functions.database.ref('{userID}/Zones/{zone}/{paramID}/{value}').onCreate( async (snapshot,context) => {
+//   var addedValue = snapshot.val() + '_' + Date.now();
+//   const userID = context.params.userID;
+//   const paramter = context.params.paramID;
+//   const zone = context.params.zone;
+//   console.log('Triggerd appendTime');
+//   console.log('new value: '+addedValue);
+//   const key = snapshot.ref.key;
+//   console.log('Key is '+key);
+//   return snapshot.ref.parent.update({key:addedValue});
+// });
+
+//calculate the average of the sensor value readings of various units
+exports.calculateAverage = functions.database.ref('{userID}/Zones/{zone}/{paramID}/{value}').onCreate( async (snapshot,context) => {
+    console.log('Triggered function calculateAverage');
     console.log('Snapshot: '+snapshot.val());
     const userID = context.params.userID; //user id
     const paramter = context.params.paramID;
@@ -71,7 +84,9 @@ exports.appendTime = functions.database.ref('{userID}/Zones/{zone}/{paramID}/{va
         oldAvgSnap.forEach( function(child) {
           lastChild = child;
         });      
-        oldAvg = lastChild.val(); // last Average Value
+        oldAvg = lastChild.val(); // last Average Value with timestamp
+        oldAvg = oldAvg.split("_")[0];
+        console.log('Truncated OldAverage: '+oldAvg);
       }
       
       console.log('Old Average: '+oldAvg);
@@ -90,6 +105,8 @@ exports.appendTime = functions.database.ref('{userID}/Zones/{zone}/{paramID}/{va
           newAvg = ((oldAvg*(num)) - oldValue + addedValue)/num;
         }
       }
+
+      newAvg = newAvg + '_' + Date.now();
 
     }catch(err){
       console.log('Error: ',err);
