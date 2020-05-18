@@ -1,6 +1,6 @@
 // //to create cloud functions and setup triggers
 const functions = require('firebase-functions');
-const MAX_LOG_COUNT = 5;
+const MAX_LOG_COUNT = 10;
 // //to access database
 const admin = require('firebase-admin');
 admin.initializeApp();
@@ -38,17 +38,18 @@ exports.truncate = functions.database.ref('/{userid}/Average/{paramID}').onWrite
    });
 }));
 
-// exports.appendTime = functions.database.ref('{userID}/Zones/{zone}/{paramID}/{value}').onCreate( async (snapshot,context) => {
-//   var addedValue = snapshot.val() + '_' + Date.now();
-//   const userID = context.params.userID;
-//   const paramter = context.params.paramID;
-//   const zone = context.params.zone;
-//   console.log('Triggerd appendTime');
-//   console.log('new value: '+addedValue);
-//   const key = snapshot.ref.key;
-//   console.log('Key is '+key);
-//   return snapshot.ref.parent.update({key:addedValue});
-// });
+exports.appendTime = functions.database.ref('{userID}/Zones/{zone}/{paramID}/{value}').onCreate( async (snapshot,context) => {
+  var addedValue = snapshot.val() + '_' + Date.now();
+  const userID = context.params.userID;
+  const paramter = context.params.paramID;
+  const zone = context.params.zone;
+  console.log('Triggerd appendTime');
+  console.log('new value: '+addedValue);
+  const key = snapshot.ref.key;
+  console.log('Key is '+key);
+  
+  return snapshot.ref.set(addedValue);
+});
 
 //calculate the average of the sensor value readings of various units
 exports.calculateAverage = functions.database.ref('{userID}/Zones/{zone}/{paramID}/{value}').onCreate( async (snapshot,context) => {
