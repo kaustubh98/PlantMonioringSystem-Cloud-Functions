@@ -13,10 +13,12 @@ admin.initializeApp();
 //     response.send("Hello World.. My Functions is up and working.");
 // });
 
+//limit the number of nodes on cloud
 exports.truncate = functions.database.ref('/{userid}/Average/{paramID}').onWrite((change => {
   console.log('Truncate Triggered Successfully');
    const p = change.after.ref;
    console.log('DataSnapshot has: '+p.toJSON());
+
    p.once('value')
    .then(function(snapshot) {
     console.log('Data object has '+snapshot.numChildren()+' Childrens');
@@ -38,6 +40,7 @@ exports.truncate = functions.database.ref('/{userid}/Average/{paramID}').onWrite
    });
 }));
 
+ // add timestamp to readings obtained from sensors
 exports.appendTime = functions.database.ref('{userID}/Zones/{zone}/{paramID}/{value}').onCreate( async (snapshot,context) => {
   var addedValue = snapshot.val() + '_' + Date.now();
   const userID = context.params.userID;
@@ -68,7 +71,7 @@ exports.calculateAverage = functions.database.ref('{userID}/Zones/{zone}/{paramI
       var count = 0;
       valSnap.forEach(function(child){
         if(count === index){
-          oldValue = child.val(); // last value
+          oldValue = child.val().split("_")[0]; // last value
         }
         count++;
       });
@@ -92,19 +95,14 @@ exports.calculateAverage = functions.database.ref('{userID}/Zones/{zone}/{paramI
       
       console.log('Old Average: '+oldAvg);
 
-      // if average is calculated for first time, add value directly
-       const dbRef = admin.database().ref(userID+'/Average/'+paramter);
-      if(oldAvg === 0){
-        newAvg = addedValue;
+      const dbRef = admin.database().ref(userID+'/Average/'+paramter);
+       // calculate new average
+       if(oldValue === 0){
+        //new Sensor unit added
+        newAvg = ((oldAvg*(num-1)) - oldValue + addedValue)/num;
       }else{
-        // calculate new average
-        if(oldValue === 0){
-          //new Sensor unit added
-          newAvg = ((oldAvg*(num-1)) - oldValue + addedValue)/num;
-        }else{
-          //just new Reading
-          newAvg = ((oldAvg*(num)) - oldValue + addedValue)/num;
-        }
+        //just new Reading
+        newAvg = ((oldAvg*(num)) - oldValue + addedValue)/num;
       }
 
       newAvg = newAvg + '_' + Date.now();
@@ -114,3 +112,29 @@ exports.calculateAverage = functions.database.ref('{userID}/Zones/{zone}/{paramI
     }
     return admin.database().ref(userID+'/Average/'+paramter).push(newAvg);
   });
+
+//send notification to user if any parameter is beyond acceptable limits
+exports.notifyUser = functions.database.ref('/{userid}/Average/{paramID}/{value}').onCreate(async (snapshot,context) => {
+  var value = snapshot.val();
+  var user = context.params.useriD;
+  var token = "dYLTdV34MGQ:APA91bENU3n23OCBRTTsP7hJ0RPiJm2m0ec13quhCG-fPwtmw_22wpkx0GCicdsnqMMpB2CSG50lz5FljTgLq_Ymm_7N1QhnUUo2kJmJlgF2YByLC0eggpdaJ3PNhu6EEMvr-X_QzRHu"
+  var parameter = context.params.paramID;
+
+  const payload = {
+    data: {
+      title: "Average " + parameter + "value",
+      message: value
+    }
+    
+  };
+
+  try {
+    const response = await admin.messaging().sendToDevice(token, payload);
+    console.log("Successfully sent message:", response);
+    return null;
+  }
+  catch (error) {
+    console.log("Error sending message:", error);
+  }
+
+});
