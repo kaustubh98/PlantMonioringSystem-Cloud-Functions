@@ -5,41 +5,6 @@ const MAX_LOG_COUNT = 10;
 const admin = require('firebase-admin');
 admin.initializeApp();
 
-// Create and Deploy Your First Cloud Functions
-// https://firebase.google.com/docs/functions/write-firebase-functions
-
-// exports.helloWorld = functions.https.onRequest((request, response) => {
-//     console.log('Deployed Function Successfully');
-//     response.send("Hello World.. My Functions is up and working.");
-// });
-
-//limit the number of nodes on cloud
-exports.truncate = functions.database.ref('/{userid}/Average/{paramID}').onWrite((change => {
-  console.log('Truncate Triggered Successfully');
-   const p = change.after.ref;
-   console.log('DataSnapshot has: '+p.toJSON());
-
-   p.once('value')
-   .then(function(snapshot) {
-    console.log('Data object has '+snapshot.numChildren()+' Childrens');
-    if (snapshot.numChildren() >= MAX_LOG_COUNT) {
-        let childCount = 0;
-        const updates = {};
-        snapshot.forEach((child) => {
-          if (++childCount <= snapshot.numChildren() - MAX_LOG_COUNT) {
-            updates[child.key] = null;
-          }
-        });
-        // Update the parent. This effectively removes the extra children.
-        return p.update(updates);
-      }
-    return null;
-   })
-   .catch(err => {
-       console.log('Error Occured',err);
-   });
-}));
-
  // add timestamp to readings obtained from sensors
 exports.appendTime = functions.database.ref('{userID}/Zones/{zone}/{paramID}/{value}').onCreate( async (snapshot,context) => {
   var addedValue = snapshot.val() + '_' + Date.now();
@@ -115,26 +80,73 @@ exports.calculateAverage = functions.database.ref('{userID}/Zones/{zone}/{paramI
 
 //send notification to user if any parameter is beyond acceptable limits
 exports.notifyUser = functions.database.ref('/{userid}/Average/{paramID}/{value}').onCreate(async (snapshot,context) => {
-  var value = snapshot.val();
-  var user = context.params.useriD;
-  var token = "dYLTdV34MGQ:APA91bENU3n23OCBRTTsP7hJ0RPiJm2m0ec13quhCG-fPwtmw_22wpkx0GCicdsnqMMpB2CSG50lz5FljTgLq_Ymm_7N1QhnUUo2kJmJlgF2YByLC0eggpdaJ3PNhu6EEMvr-X_QzRHu"
+  var value = snapshot.val().split("_")[0];
+  var user = context.params.userid;
+  console.log('UserId: '+user);
+  var token = await (await admin.database().ref(user+'/MessageToken').once('value')).val();
+  console.log('User Token: '+token);
   var parameter = context.params.paramID;
+  console.log('Parameter: '+parameter);
+
+  const displayMessage = parameter + ": " + value;
 
   const payload = {
-    data: {
-      title: "Average " + parameter + "value",
-      message: value
+    notification: {
+      title: parameter + " has recorded an unacceptable value",
+      body: displayMessage,
+      sound: "default"
     }
-    
   };
 
   try {
-    const response = await admin.messaging().sendToDevice(token, payload);
-    console.log("Successfully sent message:", response);
+
+    if(parseInt(value,10) < 40 && parameter.localeCompare("Moisture") === 0){
+      const response = await admin.messaging().sendToDevice(token, payload);
+      console.log("Successfully sent message:", response);  
+    } 
+
+    console.log('value: '+parseInt(value,10) < 40);
+    console.log('parameter check: '+(parameter.localeCompare("Moisture") === 0))
+    
     return null;
   }
   catch (error) {
     console.log("Error sending message:", error);
   }
+
+});
+
+//notify the user when battery level drops below the required threshold
+exports.batteryLevelIndication = functions.database.ref('{userID}/Zones/{zone}/BatteryLevel').onUpdate(async (snapshot,context) => {
+  console.log('Level Indicator Triggered');
+  
+  var level = snapshot.after.val();
+  console.log('Value: '+level);
+
+  var user = context.params.userID;
+  var zoneID = context.params.zone;
+  console.log('User: '+user);
+  console.log('ZoneID: '+zoneID);
+
+  var token = await (await admin.database().ref(user+'/MessageToken').once('value')).val();
+  var des = await (await admin.database().ref(user + '/Zones/' + zoneID + '/Description').once('value')).val();
+  console.log('Description: '+des);
+  const displayMessage = "Sensor unit with ID "+ zoneID +" and location described as "+ des + " has reported a low battery level. Kindly change the battery to avoid any disfunctioning";
+  const payload = {
+    notification: {
+      title: "Low Battery Level",
+      body: displayMessage,
+      sound: "default"
+    }
+  };
+
+
+
+  if(level === 0){
+    const response = await admin.messaging().sendToDevice(token, payload);
+    console.log("Successfully sent message:", response);  
+  }
+
+  return null;
 
 });
